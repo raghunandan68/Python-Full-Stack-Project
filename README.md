@@ -114,7 +114,3 @@ Ideas for extending the project:
 **User Authentication**:Add user accounts and login
 **Task Categories**:Organize task by category
 **Data Export**:Export tasks to CSV or PDF
-
-## Support
-If you encounter any issues or have questions:
-Please DM : tarunreddy4433(Instagram)
