@@ -114,3 +114,9 @@ Ideas for extending the project:
 **User Authentication**:Add user accounts and login
 **Task Categories**:Organize task by category
 **Data Export**:Export tasks to CSV or PDF
+
+git clone "repo-name"
+git init
+git add .
+git commit -m "message"
+git push
