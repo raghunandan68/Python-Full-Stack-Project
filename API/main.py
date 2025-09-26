@@ -18,6 +18,16 @@ class addBook(BaseModel):
 class searchBook(BaseModel):
     filter_by:str
     query:str
+class RequestBook(BaseModel):
+    requester_id: int
+    book_id: int
+class UpdateRequest(BaseModel):
+    request_id: int
+    status: str
+class MessageCreate(BaseModel):
+    swap_request_id: int
+    sender_id: int
+    message_text: str
 @app.post("/register")
 def register_user(user:userCreate):
     try:
@@ -58,3 +68,45 @@ def search_book(book:searchBook):
             raise HTTPException(status_code=400, detail=res)
     except Exception as e:
         raise HTTPException(status_code=500,detail=str(e))
+@app.post("/request-book")
+def request_book(data: RequestBook):
+    success, msg = request_book_in_db(data.requester_id, data.book_id)
+    if success:
+        return {"message": msg}
+    raise HTTPException(status_code=400, detail=msg)
+
+@app.get("/my-requests/{user_id}")
+def my_requests(user_id: int):
+    success, res = get_user_requests_from_db(user_id)
+    if success:
+        return {"requests": res}
+    raise HTTPException(status_code=404, detail=res)
+
+@app.get("/owner-requests/{owner_id}")
+def owner_requests(owner_id: int):
+    success, res = get_requests_for_owner_from_db(owner_id)
+    if success:
+        return {"requests": res}
+    raise HTTPException(status_code=404, detail=res)
+
+@app.put("/update-request")
+def update_request(data: UpdateRequest):
+    success, msg = update_request_status_in_db(data.request_id, data.status)
+    if success:
+        return {"message": msg}
+    raise HTTPException(status_code=400, detail=msg)
+
+@app.post("/send-message")
+def send_message(data: MessageCreate):
+    success, res = add_message_in_db(data.swap_request_id, data.sender_id, data.message_text)
+    if success:
+        return {"message": "Message sent successfully", "data": res}
+    raise HTTPException(status_code=400, detail=res)
+
+
+@app.get("/get-messages/{swap_request_id}")
+def get_messages(swap_request_id: int):
+    success, res = get_messages_in_db(swap_request_id)
+    if success:
+        return {"messages": res}
+    raise HTTPException(status_code=400, detail=res)
