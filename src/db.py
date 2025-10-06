@@ -1,56 +1,99 @@
 import os
-from supabase import Client,create_client
+from supabase import Client, create_client
 from dotenv import load_dotenv
+import uuid
+
 load_dotenv()
-url=os.getenv("SUPABASE_URL")
-key=os.getenv("SUPABASE_KEY")
-sb : Client=create_client(url,key)
-def add_user(user_name,user_email,password):
-    payload={"username":user_name,"email":user_email,"password":password}
-    res=sb.table("users").insert(payload).execute()
-    if(res.data):
+
+url = os.getenv("SUPABASE_URL")
+key = os.getenv("SUPABASE_KEY")
+sb: Client = create_client(url, key)
+
+
+def add_user(user_name, user_email, password):
+    payload = {"username": user_name, "email": user_email, "password": password}
+    res = sb.table("users").insert(payload).execute()
+    if res.data:
         return "User added successfully."
     else:
         return "Failed to add user."
 
-def validate_user(username,password):
-    res = sb.table("users")\
-        .select("id","username","password")\
-        .eq("username", username)\
-        .eq("password", password)\
+
+def validate_user(username, password):
+    res = (
+        sb.table("users")
+        .select("id", "username", "password")
+        .eq("username", username)
+        .eq("password", password)
         .execute()
-    if(res.data):
+    )
+    if res.data:
         user_id = res.data[0]["id"]
         return True, user_id
     else:
         return False, None
 
-def add_book_in_db(owner_id,title,author,description,status):
-    payload={"owner_id":owner_id,"title":title,"author":author,"description":description,"status":status}
-    res=sb.table("books").insert(payload).execute()
-    if(res.data):
-        return True, res.data[0]["id"] 
+
+def upload_book_file(owner_id, file):
+    bucket = "book_files"
+    unique_name = f"{owner_id}/{uuid.uuid4()}_{file.filename}"
+    try:
+        file_bytes = file.file.read()
+        sb.storage.from_(bucket).upload(unique_name, file_bytes, file_options={"content-type": file.content_type})
+        file_url = sb.storage.from_(bucket).get_public_url(unique_name)
+        if isinstance(file_url, dict) and "publicUrl" in file_url:
+            return file_url["publicUrl"]
+        return file_url 
+    except Exception as e:
+        raise Exception(f"File upload failed: {str(e)}")
+
+
+
+
+
+def add_book_in_db(owner_id, title, author, description, status, file_url=None):
+    payload = {
+        "owner_id": owner_id,
+        "title": title,
+        "author": author,
+        "description": description,
+        "status": status,
+        "file_url": file_url
+    }
+    res = sb.table("books").insert(payload).execute()
+    if res.data:
+        return True, res.data[0]["id"]
     elif res.error:
         return False, f"Database error: {res.error.message}"
     else:
-        return "Unable to add the book."
-    
+        return False, "Unable to add the book."
+
+
+
 def search_book_in_db(query, filter_by: str = "title"):
     try:
         if filter_by == "author":
-            res = sb.table("books").select("id, title, author, status, owner_id").ilike("author", f"%{query}%").execute()
+            res = sb.table("books").select("id, title, author, status, owner_id, file_url").ilike("author", f"%{query}%").execute()
         else:
-            res = sb.table("books").select("id, title, author, status, owner_id").ilike("title", f"%{query}%").execute()
+            res = sb.table("books").select("id, title, author, status, owner_id, file_url").ilike("title", f"%{query}%").execute()
 
         if res.data:
+            books = [
+                {
+                    "id": b["id"],
+                    "title": b["title"],
+                    "author": b["author"],
+                    "status": b["status"],
+                    "owner_id": b["owner_id"],
+                    "file_url": b.get("file_url")   
+                }
+                for b in res.data
+            ]
             return True, res.data
         else:
             return False, "No books found."
     except Exception as e:
         return False, f"Database error: {str(e)}"
-
-    
-
 def request_book_in_db(requester_id, book_id):
     try:
         book_res = sb.table("books").select("id, owner_id, status").eq("id", book_id).execute()
@@ -78,11 +121,10 @@ def request_book_in_db(requester_id, book_id):
 
 
 def get_user_requests_from_db(user_id):
-    """Fetch all requests made by a user"""
     try:
         res = (
             sb.table("swap_requests")
-            .select("id, status, book_id, books(title, author)")
+            .select("id, status, book_id, books(title, author, file_url)")
             .eq("requester_id", user_id)
             .execute()
         )
@@ -93,9 +135,11 @@ def get_user_requests_from_db(user_id):
                     "title": r["books"]["title"],
                     "author": r["books"]["author"],
                     "status": r["status"],
+                    "file_url": r["books"].get("file_url")
                 }
                 for r in res.data
             ]
+
             return True, requests
         else:
             return False, "No requests found."
@@ -104,24 +148,27 @@ def get_user_requests_from_db(user_id):
 
 
 def get_requests_for_owner_from_db(owner_id):
-    """Fetch requests for books owned by a user (with requester info)"""
     try:
         res = (
             sb.table("swap_requests")
-            .select("id, status, book_id, requester_id, users!swap_requests_requester_id_fkey(username), books(title)")
+            .select("id, status, book_id, requester_id, users!swap_requests_requester_id_fkey(username), books(title, file_url)")
             .eq("owner_id", owner_id)
             .execute()
         )
+
         if res.data:
             requests = [
-                {
-                    "request_id": r["id"],
-                    "book_title": r["books"]["title"],
-                    "requester": r["users"]["username"],
-                    "status": r["status"],
-                }
-                for r in res.data
-            ]
+            {
+                "request_id": r["id"],
+                "book_title": r["books"]["title"],
+                "requester": r["users"]["username"],
+                "status": r["status"],
+                "file_url": r["books"].get("file_url") 
+            }
+            for r in res.data
+        ]
+
+
             return True, requests
         else:
             return False, "No requests for your books."
@@ -130,7 +177,6 @@ def get_requests_for_owner_from_db(owner_id):
 
 
 def update_request_status_in_db(request_id, new_status):
-    """Update a request status (accepted, rejected, cancelled)"""
     try:
         res = sb.table("swap_requests").update({"status": new_status}).eq("id", request_id).execute()
         if res.data:
@@ -142,7 +188,6 @@ def update_request_status_in_db(request_id, new_status):
 
 
 def add_message_in_db(swap_request_id, sender_id, message_text):
-    """Insert a new chat message"""
     try:
         payload = {
             "swap_request_id": swap_request_id,

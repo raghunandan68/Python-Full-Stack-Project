@@ -61,7 +61,7 @@ def show_home():
         st.markdown(
             """
             - 🤝 Connect with fellow readers  
-            - 💬 Chat (coming soon!)  
+            - 💬 Chat  
             - 🚀 Build your reading community  
             """
         )
@@ -69,7 +69,7 @@ def show_home():
     st.write("### Choose an option to continue:")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🔑 Login", use_container_width=True):
+        if st.button("🔑 Login", use_container_width=True): 
             st.session_state['page'] = 'login'
     with col2:
         if st.button("📝 Register", use_container_width=True):
@@ -140,7 +140,7 @@ def show_dashboard():
         - ➕ Add new books to share
         - 🔍 Search books from others
         - 📬 Manage requests
-        - 💬 Chat with readers (coming soon!)
+        - 💬 Chat with readers 
         """
     )
 
@@ -173,20 +173,22 @@ def show_add_book():
         author = st.text_input("✍️ Author")
         description = st.text_area("📝 Description")
         status = st.selectbox("📌 Status", ["available", "swapped"])
+        file = st.file_uploader("📂 Upload Book File (PDF)", type=["pdf"])
         submit_btn = st.form_submit_button("📤 Add Book")
         owner_id = st.session_state.get("user_id")
         if submit_btn:
             if title.strip() == "" or author.strip() == "":
                 st.error("⚠️ Please enter title and author")
             else:
-                success, res = add_book_via_api(owner_id, title, author, description, status)
+                success, res = add_book_via_api(owner_id, title, author, description, status, file)
                 if success:
-                    st.success("✅ " + res)
+                    st.success("✅ " + str(res))
                 else:
-                    st.error("❌ " + res)
+                    st.error("❌ " + str(res))
 
     if st.button("⬅️ Back to Dashboard"):
         st.session_state['page'] = 'dashboard'
+
 
 
 def show_search_books():
@@ -288,6 +290,8 @@ def show_request_book():
                 st.markdown(
                     f"**{r['title']}** by *{r['author']}* — Status: **{r['status']}**"
                 )
+                if r['status'] == "accepted" and r.get("file_url"):
+                    st.markdown(f"[📄 Download PDF]({r['file_url']})")
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("💬 Chat", key=f"chat_myreq_{r['request_id']}"):
@@ -316,6 +320,8 @@ def show_request_book():
                 st.markdown(
                     f"**{r['book_title']}** requested by *{r['requester']}* — Status: **{r['status']}**"
                 )
+                if r['status'] == "accepted" and r.get("file_url"):
+                    st.markdown(f"[📄 Download PDF]({r['file_url']})")
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     if st.button("💬 Chat", key=f"chat_ownerreq_{r['request_id']}"):
